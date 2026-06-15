@@ -1,9 +1,9 @@
 # Tasks
 
 ## Pre-existing (repo rename)
-- [x] Update `README.md`: Replace all occurrences of 'byrongamatos' with 'hexrebuilt' in Docker pull and git build URLs.
-- [x] Update `Dockerfile`: Replace 'byrongamatos' with 'hexrebuilt' in the 'org.opencontainers.image.source' label.
-- [x] Verify consistency across `README.md`, `Dockerfile`, and `docker-compose.yml`.
+- [ ] Update `README.md`: Replace all occurrences of 'byrongamatos' with 'hexrebuilt' in Docker pull and git build URLs.
+- [ ] Update `Dockerfile`: Replace 'byrongamatos' with 'hexrebuilt' in the 'org.opencontainers.image.source' label.
+- [ ] Verify consistency across `README.md`, `Dockerfile`, and `docker-compose.yml`.
 
 ## Feature: Idle Model Unloading (unload WhisperX ASR after 5min inactivity)
 
@@ -34,6 +34,6 @@
 - [x] Full test suite green
 
 ## Post-merge (conditional on merge to fork/main)
-- [x] Change image ref in `docker-compose.yml` from `ghcr.io/byrongamatos/...` to `ghcr.io/hexrebuilt/...`
-- [x] Update Dockerfile LABEL
-- [x] Update README.md references
+- [ ] Change image ref in `docker-compose.yml` from `ghcr.io/byrongamatos/...` to `ghcr.io/hexrebuilt/...`
+- [ ] Update Dockerfile LABEL
+- [ ] Update README.md references

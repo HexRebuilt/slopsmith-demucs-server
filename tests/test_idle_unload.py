@@ -141,6 +141,61 @@ class TestIdleModelManager:
             )
 
 
+    def test_acquire_increments_in_flight(self):
+        """acquire() should increment _in_flight counter."""
+        manager = IdleModelManager()
+        assert manager._in_flight == 0
+        manager.acquire()
+        assert manager._in_flight == 1
+        manager.acquire()
+        assert manager._in_flight == 2
+
+    def test_release_decrements_in_flight(self):
+        """release() should decrement _in_flight counter."""
+        manager = IdleModelManager()
+        manager.acquire()
+        manager.acquire()
+        manager.release()
+        assert manager._in_flight == 1
+        manager.release()
+        assert manager._in_flight == 0
+
+    def test_release_below_zero_is_clamped(self):
+        """release() should not go below zero."""
+        manager = IdleModelManager()
+        manager.release()
+        assert manager._in_flight == 0
+        manager.release()
+        assert manager._in_flight == 0
+
+    def test_acquire_touches_timer(self):
+        """acquire() should also reset the idle timer (like touch())."""
+        manager = IdleModelManager()
+        before = manager._last_used
+        time.sleep(0.01)
+        manager.acquire()
+        assert manager._last_used > before
+
+    def test_unload_skips_when_in_flight(self):
+        """unload() should NOT invoke callback if _in_flight > 0."""
+        calls = []
+        manager = IdleModelManager(ttl=1, on_unload=lambda: calls.append(1))
+        manager.acquire()  # mark as in-flight
+        _make_idle(manager, seconds=10)  # past TTL
+        manager.unload()
+        assert len(calls) == 0  # should skip because in_flight > 0
+
+    def test_unload_proceeds_when_in_flight_zero_and_idle(self):
+        """unload() should invoke callback if _in_flight == 0 and idle."""
+        calls = []
+        manager = IdleModelManager(ttl=1, on_unload=lambda: calls.append(1))
+        manager.acquire()
+        manager.release()  # in_flight back to 0
+        _make_idle(manager, seconds=10)
+        manager.unload()
+        assert len(calls) == 1
+
+
 class TestIdleEnvVar:
     """Tests for the MODEL_IDLE_TTL env var with safe int() parsing.
     

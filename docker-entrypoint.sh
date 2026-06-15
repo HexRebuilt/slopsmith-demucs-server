@@ -8,7 +8,7 @@
 # Environment variables:
 #   PORT                    — Server port (default: 7865)
 #   HOST                    — Server bind address (default: 0.0.0.0)
-#   AUTO_UPDATE             — Enable auto-update (default: true)
+#   AUTO_UPDATE             — Enable auto-update (default: false)
 #   UPDATE_TIME             — HH:MM to check for updates (default: 04:00)
 #   UPDATE_CHECK_INTERVAL   — Seconds between time checks (default: 3600)
 #   SKIP_WARMUP             — Pass --skip-warmup to server (default: false)
@@ -26,7 +26,7 @@ auto_update_loop() {
     LAST_UPDATE_DATE=""
 
     while true; do
-        if [ "${AUTO_UPDATE:-true}" = "true" ]; then
+        if [ "${AUTO_UPDATE:-false}" = "true" ]; then
             CURRENT_TIME=$(date +%H:%M)
             TARGET_TIME="${UPDATE_TIME:-04:00}"
 
@@ -81,7 +81,6 @@ auto_update_loop() {
                     fi
                 fi
             fi
-            fi
         fi
 
         sleep "${UPDATE_CHECK_INTERVAL:-3600}"
@@ -109,12 +108,13 @@ restart_loop() {
     if [ -n "${SLOPSMITH_DEMUCS_MODEL:-}" ]; then
         CLI_ARGS+=("--model" "$SLOPSMITH_DEMUCS_MODEL")
     fi
+    # API key passed via env var (not CLI args) to avoid ps/procfs leak
     if [ -n "${SLOPSMITH_API_KEY:-}" ]; then
-        CLI_ARGS+=("--api-key" "$SLOPSMITH_API_KEY")
+        export SLOPSMITH_API_KEY
     fi
 
     while true; do
-        echo "[entrypoint] Starting server: python server.py ${CLI_ARGS[*]}" | sed "s/--api-key [^ ]*/--api-key ****/g"
+        echo "[entrypoint] Starting server: python server.py ${CLI_ARGS[*]}"
         python server.py "${CLI_ARGS[@]}" &
         SERVER_PID=$!
         echo "[entrypoint] Server PID: $SERVER_PID"
@@ -135,7 +135,7 @@ restart_loop() {
         # If auto-update is off, the outer update loop never creates
         # restart-server files, so we break only if the server exits
         # on its own AND no restart is pending.
-        if [ ! -f /tmp/restart-server ] && [ "${AUTO_UPDATE:-true}" != "true" ]; then
+        if [ ! -f /tmp/restart-server ] && [ "${AUTO_UPDATE:-false}" != "true" ]; then
             echo "[entrypoint] Server exited and auto-update disabled. Exiting."
             break
         fi
@@ -148,12 +148,12 @@ restart_loop() {
 echo "[entrypoint] Starting Slopsmith Demucs Server"
 echo "[entrypoint]   Port:           ${PORT:-7865}"
 echo "[entrypoint]   Host:           ${HOST:-0.0.0.0}"
-echo "[entrypoint]   Auto-update:    ${AUTO_UPDATE:-true}"
+echo "[entrypoint]   Auto-update:    ${AUTO_UPDATE:-false}"
 echo "[entrypoint]   Update time:    ${UPDATE_TIME:-04:00}"
 echo "[entrypoint]   Check interval: ${UPDATE_CHECK_INTERVAL:-3600}s"
 
 # Start auto-update daemon in background (if enabled)
-if [ "${AUTO_UPDATE:-true}" = "true" ]; then
+if [ "${AUTO_UPDATE:-false}" = "true" ]; then
     auto_update_loop &
     echo "[entrypoint] Auto-update daemon started (PID $!)"
 else

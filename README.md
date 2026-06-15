@@ -181,7 +181,7 @@ The container can automatically check for repository updates and restart. **Disa
 
 **How it works:**
 1. A background daemon runs inside the container
-2. Every `UPDATE_CHECK_INTERVAL` seconds (default: 3600 = 1 hour), it checks if the current time matches `UPDATE_TIME` (default: 04:00)
+2. Every `UPDATE_CHECK_INTERVAL` seconds (default: 3600 = 1 hour), it checks whether the current time is within a 30-minute window around `UPDATE_TIME` (default: 04:00), running at most once per day after a successful update
 3. At the configured time, it runs `git fetch origin` and compares `HEAD` with `@{upstream}`
 4. If changes are detected, it pulls the new code, reinstalls dependencies, and gracefully restarts the server
 

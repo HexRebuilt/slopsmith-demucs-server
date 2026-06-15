@@ -174,15 +174,33 @@ class IdleModelManager:
         self._last_used = time.monotonic()
         self._lock = threading.Lock()
         self._on_unload = on_unload
+        self._in_flight = 0
 
     def touch(self):
         """Reset the idle timer — call on every model access."""
         with self._lock:
             self._last_used = time.monotonic()
 
+    def acquire(self):
+        """Mark model as in-use — prevents unload while active.
+        
+        Atomically touches the idle timer and increments the in-flight
+        counter so a concurrent unload() sees the active request.
+        """
+        with self._lock:
+            self._last_used = time.monotonic()
+            self._in_flight += 1
+
+    def release(self):
+        """Mark model as no longer in use."""
+        with self._lock:
+            self._in_flight = max(0, self._in_flight - 1)
+
     def unload(self):
         """Invoke the unload callback if still idle (re-checks under lock)."""
         with self._lock:
+            if self._in_flight > 0:
+                return  # active requests — don't unload
             elapsed = time.monotonic() - self._last_used
             if not (self._ttl > 0 and elapsed > self._ttl):
                 return  # was touched since we checked — skip
@@ -479,15 +497,19 @@ def _get_whisperx_model():
                 device=_whisperx_device(),
                 compute_type=_whisperx_compute_type(),
             )
+        _idle_manager.acquire()  # touch + in-flight tracking (atomic with model check)
     # Intentionally do NOT mark warmup ready here. /align needs both the
     # ASR model AND a wav2vec2 aligner to function — if the aligner load
     # fails (unsupported language, transient network), /align would still
     # 500 while /health.warmup.whisperx claimed "ready". The aligner
     # helper marks ready only after a successful aligner load, which is
     # the true gate for subsystem readiness.
-    # Touch idle timer — model is being accessed
-    _idle_manager.touch()
     return _whisperx_model
+
+
+def _release_whisperx_model():
+    """Decrement the in-flight counter, allowing idle unload to proceed."""
+    _idle_manager.release()
 
 
 def _get_whisperx_aligner(language: str):
@@ -738,13 +760,16 @@ async def align_lyrics(
             # threads both needles: each window is anchored to actual
             # speech (no silence misalignment) and short (no OOM).
             asr_model = _get_whisperx_model()
-            transcribe_kwargs: dict = {"batch_size": 16}
-            if language:
-                normalized_lang = language.strip().lower()
-                if not re.fullmatch(r'[a-z]{2,8}', normalized_lang):
-                    raise ValueError(f"Invalid language code: {normalized_lang!r}")
-                transcribe_kwargs["language"] = normalized_lang
-            transcribed = asr_model.transcribe(audio, **transcribe_kwargs)
+            try:
+                transcribe_kwargs: dict = {"batch_size": 16}
+                if language:
+                    normalized_lang = language.strip().lower()
+                    if not re.fullmatch(r'[a-z]{2,8}', normalized_lang):
+                        raise ValueError(f"Invalid language code: {normalized_lang!r}")
+                    transcribe_kwargs["language"] = normalized_lang
+                transcribed = asr_model.transcribe(audio, **transcribe_kwargs)
+            finally:
+                _release_whisperx_model()
             # Caller's explicit hint takes precedence — Whisper's auto-
             # detection can mis-classify on short clips, instrumental
             # intros, or non-English vocals, which would then load the
@@ -1710,6 +1735,7 @@ def _warmup_whisperx() -> None:
     _set_warmup_state("whisperx", "downloading")
     try:
         _get_whisperx_model()
+        _release_whisperx_model()
         _get_whisperx_aligner("en")
         _set_warmup_state("whisperx", "ready")
     except Exception as exc:  # noqa: BLE001

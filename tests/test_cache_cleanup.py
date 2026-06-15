@@ -7,6 +7,7 @@ torch/whisperx import chain that requires GPU dependencies.
 import ast
 import re
 from pathlib import Path
+from packaging.version import Version
 
 import pytest
 
@@ -116,7 +117,7 @@ class TestRequirementsPins:
 
     REQUIRED_PINS = {
         "fastapi": "0.109.1",
-        "python-multipart": "0.0.7",
+        "python-multipart": "0.0.18",
     }
 
     def test_requirements_file_exists(self):
@@ -128,7 +129,7 @@ class TestRequirementsPins:
         assert "fastapi" in pins, "fastapi pin missing from requirements.txt"
         actual = pins["fastapi"]
         required = self.REQUIRED_PINS["fastapi"]
-        assert actual >= required, (
+        assert Version(actual) >= Version(required), (
             f"fastapi pin {actual} is below minimum {required} "
             f"(vuln < {required})"
         )
@@ -138,7 +139,7 @@ class TestRequirementsPins:
         assert "python-multipart" in pins, "python-multipart pin missing"
         actual = pins["python-multipart"]
         required = self.REQUIRED_PINS["python-multipart"]
-        assert actual >= required, (
+        assert Version(actual) >= Version(required), (
             f"python-multipart pin {actual} is below minimum {required} "
             f"(vuln < {required})"
         )
