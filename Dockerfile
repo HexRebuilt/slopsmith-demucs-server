@@ -16,7 +16,7 @@ FROM python:3.11-slim AS base
 
 LABEL org.opencontainers.image.title="Slopsmith Demucs Server"
 LABEL org.opencontainers.image.description="AI source separation, lyrics alignment, and pitch extraction service for Slopsmith"
-LABEL org.opencontainers.image.source="https://github.com/HexRebuilt/slopsmith-demucs-server"
+LABEL org.opencontainers.image.source="https://github.com/byrongamatos/slopsmith-demucs-server"
 
 # Prevent Python from writing .pyc files & buffer stdout
 ENV PYTHONDONTWRITEBYTECODE=1 \

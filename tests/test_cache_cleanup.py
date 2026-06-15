@@ -269,3 +269,98 @@ class TestFirstSweepImmediate:
             f"time.sleep should be the LAST statement in the while loop, "
             f"but last statement is: {last_stmt_text[:100]}"
         )
+
+
+# ── PR compliance: namespace and config checks ─────────────────────────
+
+class TestDockerComposeNamespace:
+    """docker-compose.yml must reference upstream byrongamatos namespace
+    for the PR to merge. CodeRabbit + maintainer both flagged this."""
+
+    COMPOSE_PATH = Path(__file__).parent.parent / "docker-compose.yml"
+
+    def test_image_namespace_is_byrongamatos(self):
+        """The image field must use ghcr.io/byrongamatos/..."""
+        content = self.COMPOSE_PATH.read_text()
+        assert "ghcr.io/byrongamatos/slopsmith-demucs-server" in content, (
+            "docker-compose.yml image must use byrongamatos namespace "
+            "(for upstream PR merge)"
+        )
+
+    def test_build_url_namespace_is_byrongamatos(self):
+        """The build URL comment must use byrongamatos."""
+        content = self.COMPOSE_PATH.read_text()
+        assert "byrongamatos/slopsmith-demucs-server.git" in content, (
+            "docker-compose.yml build URL must reference byrongamatos"
+        )
+
+
+class TestDockerfileNamespace:
+    """Dockerfile labels must reference upstream byrongamatos."""
+
+    DOCKERFILE_PATH = Path(__file__).parent.parent / "Dockerfile"
+
+    def test_source_label_uses_byrongamatos(self):
+        """org.opencontainers.image.source must reference byrongamatos."""
+        content = self.DOCKERFILE_PATH.read_text()
+        assert "github.com/byrongamatos/slopsmith-demucs-server" in content, (
+            "Dockerfile LABEL must reference byrongamatos namespace"
+        )
+
+
+class TestReadmeNamespace:
+    """README must reference upstream byrongamatos."""
+
+    README_PATH = Path(__file__).parent.parent / "README.md"
+
+    def test_docker_pull_uses_byrongamatos(self):
+        """Docker pull command must reference byrongamatos."""
+        content = self.README_PATH.read_text()
+        assert "ghcr.io/byrongamatos/slopsmith-demucs-server" in content, (
+            "README docker pull must reference byrongamatos"
+        )
+
+    def test_git_clone_uses_byrongamatos(self):
+        """Git clone URLs must reference byrongamatos."""
+        content = self.README_PATH.read_text()
+        assert "github.com/byrongamatos/slopsmith-demucs-server" in content, (
+            "README git URLs must reference byrongamatos"
+        )
+
+
+class TestEntrypointLastUpdateDate:
+    """docker-entrypoint.sh must not set LAST_UPDATE_DATE on failure,
+    so transient errors retry on the next cycle instead of waiting 24h."""
+
+    ENTRYPOINT_PATH = Path(__file__).parent.parent / "docker-entrypoint.sh"
+
+    def test_last_update_date_only_on_success(self):
+        """LAST_UPDATE_DATE should only be set when the update succeeds,
+        not when git fetch or git pull fails. Read the source and verify
+        the pattern: LAST_UPDATE_DATE="$TODAY" appears ONLY after the 
+        success path (after 'Update complete') and not in failure branches."""
+        content = self.ENTRYPOINT_PATH.read_text()
+        lines = content.splitlines()
+        
+        # Find value assignments: LAST_UPDATE_DATE="$TODAY" (not initialization or comparison)
+        assign_lines = []
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            # Match actual value assignment, not init (="") or comparison (!=)
+            if "LAST_UPDATE_DATE=\"$TODAY\"" in stripped:
+                assign_lines.append((i, stripped))
+        
+        # There should be exactly 1 assignment: after the git pull --ff-only success path
+        assert len(assign_lines) == 1, (
+            f"Expected 1 LAST_UPDATE_DATE assignment, found {len(assign_lines)}: {assign_lines}"
+        )
+        
+        # The assignment should be AFTER 'Update complete' (success path)
+        line_num, line_text = assign_lines[0]
+        # Check that the line appears after 'Update complete' in the file
+        update_complete_idx = content.index("Update complete")
+        assignment_idx = content.index(line_text)
+        assert assignment_idx > update_complete_idx, (
+            f"LAST_UPDATE_DATE at line {line_num} should be after 'Update complete' "
+            f"(success path), not in a failure branch"
+        )

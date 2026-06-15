@@ -73,14 +73,14 @@ auto_update_loop() {
                                 pip install --no-cache-dir demucs --no-deps 2>/dev/null || echo "[updater] Warning: demucs install failed (non-fatal)"
                                 echo "[updater] Update complete. Restarting server..."
                                 touch /tmp/restart-server
+                                LAST_UPDATE_DATE="$TODAY"
                             else
                                 echo "[updater] Fast-forward update failed. Skipping this cycle."
                             fi
                         fi
                     fi
                 fi
-
-                LAST_UPDATE_DATE="$TODAY"
+            fi
             fi
         fi
 

@@ -1,8 +1,8 @@
 # Slopsmith Demucs Server
 
-A lightweight GPU-accelerated service providing AI source separation, lyrics alignment, and per-syllable pitch extraction for [Slopsmith](https://github.com/hexrebuilt/slopsmith). Designed to run on a desktop with a CUDA GPU while Slopsmith runs on a NAS or Docker host.
+A lightweight GPU-accelerated service providing AI source separation, lyrics alignment, and per-syllable pitch extraction for [Slopsmith](https://github.com/byrongamatos/slopsmith). Designed to run on a desktop with a CUDA GPU while Slopsmith runs on a NAS or Docker host.
 
-[![Docker Build](https://github.com/hexrebuilt/slopsmith-demucs-server/actions/workflows/docker-build.yml/badge.svg)](https://github.com/hexrebuilt/slopsmith-demucs-server/actions/workflows/docker-build.yml)
+[![Docker Build](https://github.com/byrongamatos/slopsmith-demucs-server/actions/workflows/docker-build.yml/badge.svg)](https://github.com/byrongamatos/slopsmith-demucs-server/actions/workflows/docker-build.yml)
 
 ## Features
 
@@ -21,7 +21,7 @@ A lightweight GPU-accelerated service providing AI source separation, lyrics ali
 ### Install (Native)
 
 ```bash
-git clone https://github.com/hexrebuilt/slopsmith-demucs-server.git
+git clone https://github.com/byrongamatos/slopsmith-demucs-server.git
 cd slopsmith-demucs-server
 python -m venv .venv
 source .venv/bin/activate
@@ -272,13 +272,13 @@ docker pull ghcr.io/YOUR_GITHUB_USER/slopsmith-demucs-server:latest
 
 **Or from the upstream repo (once PR is merged):**
 ```bash
-docker pull ghcr.io/hexrebuilt/slopsmith-demucs-server:latest
+docker pull ghcr.io/byrongamatos/slopsmith-demucs-server:latest
 ```
 
 **Build directly from git (no clone needed):**
 ```bash
 # From upstream main
-docker build -t slopsmith-demucs-server https://github.com/hexrebuilt/slopsmith-demucs-server.git#main
+docker build -t slopsmith-demucs-server https://github.com/byrongamatos/slopsmith-demucs-server.git#main
 
 # From your fork
 docker build -t slopsmith-demucs-server https://github.com/YOUR_USER/slopsmith-demucs-server.git#main
@@ -291,7 +291,7 @@ docker run --gpus all -p 7865:7865 slopsmith-demucs-server
 ```yaml
 services:
   slopsmith-demucs:
-    build: https://github.com/hexrebuilt/slopsmith-demucs-server.git#main
+    build: https://github.com/byrongamatos/slopsmith-demucs-server.git#main
     ports:
       - "7865:7865"
 ```
