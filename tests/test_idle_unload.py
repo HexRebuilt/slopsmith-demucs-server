@@ -262,3 +262,24 @@ class TestIdleEnvVar:
                                 found_try = True
                                 break
         assert found_try, "MODEL_IDLE_TTL int() conversion must be wrapped in try/except"
+
+
+class TestAutomaticUnloadEnvVar:
+    """Tests for the AUTOMATIC_UNLOAD env var that enables/disables idle unloading."""
+
+    SERVER_PY = Path(__file__).parent.parent / "server.py"
+
+    def test_automatic_unload_true_enables_ttl(self):
+        """When AUTOMATIC_UNLOAD=true (or unset), MODEL_IDLE_TTL should keep its value."""
+        source = self.SERVER_PY.read_text()
+        # The code should read AUTOMATIC_UNLOAD env var
+        assert 'os.environ.get("AUTOMATIC_UNLOAD' in source or "os.environ.get('AUTOMATIC_UNLOAD'" in source, (
+            "server.py must read AUTOMATIC_UNLOAD env var"
+        )
+
+    def test_automatic_unload_false_disables_ttl(self):
+        """When AUTOMATIC_UNLOAD=false, MODEL_IDLE_TTL must be forced to 0."""
+        source = self.SERVER_PY.read_text()
+        assert 'MODEL_IDLE_TTL = 0' in source, (
+            "server.py must force MODEL_IDLE_TTL=0 when AUTOMATIC_UNLOAD=false"
+        )

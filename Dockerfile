@@ -75,6 +75,7 @@ ENV PORT=7865 \
     SLOPSMITH_DEMUCS_CACHE=/app/cache \
     CACHE_TTL=24h \
     MODEL_IDLE_TTL=300 \
+    AUTOMATIC_UNLOAD=true \
     # Redirect HuggingFace and PyTorch caches to the persistent volume
     HF_HOME=/app/cache/huggingface \
     TORCH_HOME=/app/cache/torch \

@@ -196,7 +196,8 @@ The container can automatically check for repository updates and restart. **Disa
 | `SLOPSMITH_DEMUCS_MODEL` | — | Override default Demucs model |
 | `SLOPSMITH_API_KEY` | — | API authentication key |
 | `CACHE_TTL` | `24h` | Cache cleanup TTL (`1h`, `12h`, `24h`, or `NEVER` to disable auto-cleanup) |
-| `MODEL_IDLE_TTL` | `300` | Seconds of inactivity before the WhisperX ASR model is unloaded from VRAM (0 = disabled). Auto-reloaded on the next `/align` request. |
+| `AUTOMATIC_UNLOAD` | `true` | Enable automatic GPU VRAM unloading of WhisperX ASR model after inactivity. Set to `false` to keep model resident permanently. |
+| `MODEL_IDLE_TTL` | `300` | Seconds of inactivity before the WhisperX ASR model is unloaded from VRAM (only when `AUTOMATIC_UNLOAD=true`). Auto-reloaded on the next `/align` request. |
 
 **Disable auto-update** (default — safe for Portainer):
 ```bash

@@ -76,12 +76,18 @@ CACHE_TTL = os.environ.get("CACHE_TTL", "24h")
 _PRESERVED_CACHE_DIRS = frozenset({"torch", "huggingface", "locale"})
 
 # Idle model unloading: seconds of inactivity before WhisperX ASR is
-# unloaded from VRAM. Set to 0 to disable unloading.
+# unloaded from VRAM. Set AUTOMATIC_UNLOAD=false to disable, or
+# MODEL_IDLE_TTL=0 to disable. AUTOMATIC_UNLOAD=true (default) enables
+# automatic unloading with MODEL_IDLE_TTL (default: 300s = 5 min).
+_AUTOMATIC_UNLOAD = os.environ.get("AUTOMATIC_UNLOAD", "true").strip().lower()
 try:
     MODEL_IDLE_TTL = int(os.environ.get("MODEL_IDLE_TTL", "300"))
 except (ValueError, TypeError):
     print("[server] WARNING: MODEL_IDLE_TTL is not a valid integer; using default (300)", flush=True)
     MODEL_IDLE_TTL = 300
+# AUTOMATIC_UNLOAD=false overrides TTL to 0 (disable unloading)
+if _AUTOMATIC_UNLOAD == "false":
+    MODEL_IDLE_TTL = 0
 
 
 def _parse_ttl(ttl_str: str) -> int | None:

@@ -58,6 +58,8 @@ services:
       - CACHE_TTL=24h
       # Idle model TTL: unload WhisperX ASR model from VRAM after 300s of inactivity (0=disabled)
       - MODEL_IDLE_TTL=300
+      # Automatic unload: set to false to keep WhisperX ASR model in VRAM permanently
+      - AUTOMATIC_UNLOAD=true
       # Cache directories — redirect all model downloads to the
       # persistent volume so they survive container restarts:
       - SLOPSMITH_DEMUCS_CACHE=/app/cache
