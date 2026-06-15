@@ -19,40 +19,44 @@ Add an `IdleModelManager` that monitors the WhisperX ASR model (`_whisperx_model
 
 ```text
 IdleModelManager:
-  - _model_ref: reference to module-level _whisperx_model (via closure/global)
+  - _in_flight: int counter (active request tracking)
   - _last_used: float timestamp (time.monotonic)
   - _ttl: int seconds (from env MODEL_IDLE_TTL, default 300)
   - _lock: threading.Lock
 
   Methods:
-    touch()       — updates _last_used
-    _check_loop() — daemon thread: every 60s, if idle > TTL, unload
-    unload()      — set _whisperx_model = None, torch.cuda.empty_cache(), update warmup_state
+    touch()       — updates _last_used (reset idle timer)
+    acquire()     — touch + increment in_flight (atomic, prevents unload during active request)
+    release()     — decrement in_flight (allows unload when idle)
+    unload()      — check _in_flight > 0 (skip if active), set _whisperx_model = None,
+                    torch.cuda.empty_cache(), update warmup_state
 ```
 
 ### Threading
 
 - Background daemon thread created in `_startup_event()` alongside cache cleanup.
 - Check interval: 60 seconds (hardcoded, not configurable).
-- `touch()` called from within `_get_whisperx_model()` (at return) and from `/align` endpoint scope.
+- `acquire()` called from within `_get_whisperx_model()` (inside `_whisperx_model_lock`, atomic with model check).
+- `release()` called by callers after model usage (try/finally in `/align`, after warmup).
 
 ### States added to `warmup_state`
 
-- `"whisperx"`: `"unloaded"` — new value, set by `IdleModelManager.unload()`.
+- `"whisperx"`: `"evicted"` — new value, set by `IdleModelManager.unload()`.
 - On re-load, `_mark_lazy_loaded("whisperx")` transitions back to `"ready"`.
-- `"unloaded"` is sanitized to `"unloaded"` (safe for /health — no internal detail leaked).
+- `"evicted"` is sanitized to `"evicted"` (safe for /health — no internal detail leaked).
 
 ### Config
 
 | Env var | Default | Description |
 |---------|---------|-------------|
+| `AUTOMATIC_UNLOAD` | `true` | Master switch. Set to `false` to disable unloading entirely. |
 | `MODEL_IDLE_TTL` | `300` | Seconds of inactivity before unload. `0` disables unloading. |
 
 ## Files
 
 | File | Change |
 |------|--------|
-| `server.py` | Add `IdleModelManager` class, daemon thread in `_startup_event`, `touch()` calls in `_get_whisperx_model`, `"unloaded"` in warmup_state |
+| `server.py` | Add `IdleModelManager` class, daemon thread in `_startup_event`, `acquire()`/`release()` calls in `_get_whisperx_model`, `"evicted"` in warmup_state |
 | `tests/test_idle_unload.py` | New test file using AST extraction pattern (same as `test_cache_cleanup.py`) |
 | `docker-compose.yml` | Add `MODEL_IDLE_TTL=300` to environment |
 | `Dockerfile` | Add `MODEL_IDLE_TTL=300` to `ENV` block |
@@ -69,9 +73,9 @@ Using the same AST-extraction pattern from `test_cache_cleanup.py` to avoid the 
 2. **touch defers unload** — after `touch()`, the idle timer resets.
 3. **unload sets `_whisperx_model = None`** — verify the global is set to None.
 4. **unload calls `torch.cuda.empty_cache()`** — mock/patch to verify call.
-5. **unload sets warmup_state["whisperx"] = "unloaded"** — state transition.
+5. **unload sets warmup_state["whisperx"] = "evicted"** — state transition.
 6. **reload after unload** — `_get_whisperx_model()` reinitializes when `_whisperx_model is None`.
-7. **health reflects "unloaded"** — `"whisperx": "unloaded"` in `/health` response.
+7. **health reflects "evicted"** — `"whisperx": "evicted"` in `/health` response.
 8. **Default TTL is 300s** — no env var set.
 
 ## Tasks
@@ -83,25 +87,21 @@ Using the same AST-extraction pattern from `test_cache_cleanup.py` to avoid the 
 - Define `IdleModelManager` class with `__init__`, `touch`, `unload`, `_check_loop`.
 - Thread safety: use `_lock` around `_last_used` reads/writes.
 
-### 2. Add "unloaded" state support
+### 2. Add "evicted" state support
 
-- Add `"unloaded"` to the set of possible `warmup_state` values.
-- Ensure `_sanitize` in `/health` passes `"unloaded"` through (it starts with no prefix, so it passes).
-- Ensure `_mark_lazy_loaded` transitions "unloaded" → "ready" correctly (it will: current check is `if current in ("ready", "downloading"): return`, and `"unloaded"` is neither, so it will call `_set_warmup_state("whisperx", "ready")`).
+- Add `"evicted"` to the set of possible `warmup_state` values.
+- Ensure `_sanitize` in `/health` passes `"evicted"` through (it starts with no prefix, so it passes).
+- Ensure `_mark_lazy_loaded` transitions "evicted" → "ready" correctly (it will: current check is `if current in ("ready", "downloading"): return`, and `"evicted"` is neither, so it will call `_set_warmup_state("whisperx", "ready")`).
 
 ### 3. Integrate into startup
 
-- In `_startup_event`, after cache cleanup thread start, create an `IdleModelManager` instance and start its `_check_loop` daemon thread.
-- Store manager on `app.state.idle_manager`.
+- `IdleModelManager` already created at module level. Start its `_check_loop` daemon thread in `_startup_event`.
 
-### 4. Integrate touch into `_get_whisperx_model`
+### 4. Integrate acquire into `_get_whisperx_model`
 
-- At the end of `_get_whisperx_model()`, call manager's `touch()`.
-- Need to pass manager reference (or use a module-level global).
+- At the end of `_get_whisperx_model()`, call manager's `acquire()` inside the model lock.
 
-### 5. Integrate touch into `/align` endpoint
 
-- Also call `touch()` at the start of `/align` to refresh the timer on each request (belt-and-suspenders with the call inside `_get_whisperx_model`).
 
 ### 6. Integration test
 
@@ -109,7 +109,7 @@ Using the same AST-extraction pattern from `test_cache_cleanup.py` to avoid the 
 
 ### 7. Docker config
 
-- Add `MODEL_IDLE_TTL=300` to `docker-compose.yml` environment section.
+- Add `AUTOMATIC_UNLOAD=true`, `MODEL_IDLE_TTL=300` to `docker-compose.yml` environment section.
 - Add `MODEL_IDLE_TTL=300` to `Dockerfile` ENV block.
 
 ## Implementation approach

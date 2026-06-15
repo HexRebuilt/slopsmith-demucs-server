@@ -620,12 +620,12 @@ def _get_whisperx_aligner(language: str):
             except Exception:
                 pass
 
-    # Any successful aligner load satisfies the readiness contract after
-    # an idle unload (the ASR model was already loaded). If the state was
-    # "ready" this is a no-op; if it was "unloaded" it transitions back
-    # to "ready"; if warmup is still in-flight it defers to the warmup
-    # thread's final state.
-    _mark_lazy_loaded("whisperx")
+    # Only mark top-level whisperx ready when the English aligner is
+    # loaded — the warmup contract is "ASR + en aligner". Non-English
+    # aligner loads keep the state as-is (ready stays ready, unloaded
+    # stays unloaded; the en aligner or warmup thread transitions it).
+    if lang == "en":
+        _mark_lazy_loaded("whisperx")
     return pair
 
 
