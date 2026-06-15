@@ -22,8 +22,8 @@
 - [x] _mark_lazy_loaded("whisperx") on model reload after unload
 
 ### Task 4 — Warmup state + health
-- [x] "unloaded" state transitions correctly in warmup_state
-- [x] /health reflects "unloaded" safely (no prefix leak)
+- [x] "evicted" state transitions correctly in warmup_state
+- [x] /health reflects "evicted" safely (no prefix leak)
 
 ### Task 5 — Docker config
 - [x] Add `MODEL_IDLE_TTL=300` to `docker-compose.yml`

@@ -218,7 +218,7 @@ class TestIdleEnvVar:
                 return node
             # Check try/except blocks
             if isinstance(node, ast.Try):
-                for handler in node.handlers:
+                for _handler in node.handlers:
                     for n in ast.walk(node):
                         if isinstance(n, ast.Assign):
                             for t in n.targets:
@@ -233,6 +233,19 @@ class TestIdleEnvVar:
         assert 'os.environ.get("MODEL_IDLE_TTL", "300")' in source or 'os.environ.get(\'MODEL_IDLE_TTL\', \'300\')' in source, (
             "MODEL_IDLE_TTL should default to '300'"
         )
+
+    def test_handler_naming_convention(self):
+        """Loop variables iterating over .handlers must use _handler convention."""
+        source = Path(__file__).read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.For) and isinstance(node.iter, ast.Attribute):
+                if node.iter.attr == "handlers" and isinstance(node.target, ast.Name):
+                    if not node.target.id.startswith("_"):
+                        pytest.fail(
+                            f"Loop variable '{node.target.id}' iterating over "
+                            f".handlers at line {node.lineno} does not start with '_'"
+                        )
 
     def test_safe_int_parse(self):
         """MODEL_IDLE_TTL should use try/except for safe int() parsing."""

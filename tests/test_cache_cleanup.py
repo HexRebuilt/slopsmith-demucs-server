@@ -274,6 +274,20 @@ class TestFirstSweepImmediate:
 
 # ── PR compliance: namespace and config checks ─────────────────────────
 
+class TestDockerfileConfig:
+    """Dockerfile should not set MPLLOCALEDIR unless specifically needed."""
+
+    DOCKERFILE_PATH = Path(__file__).parent.parent / "Dockerfile"
+
+    def test_no_mpllocaledir(self):
+        """MPLLOCALEDIR should not be set in Dockerfile (not needed)."""
+        content = self.DOCKERFILE_PATH.read_text()
+        assert "MPLLOCALEDIR" not in content, (
+            "MPLLOCALEDIR should be removed from Dockerfile "
+            "(matplotlib locale not required)"
+        )
+
+
 class TestDockerComposeNamespace:
     """docker-compose.yml must reference upstream byrongamatos namespace
     for the PR to merge. CodeRabbit + maintainer both flagged this."""
@@ -293,6 +307,38 @@ class TestDockerComposeNamespace:
         content = self.COMPOSE_PATH.read_text()
         assert "byrongamatos/slopsmith-demucs-server.git" in content, (
             "docker-compose.yml build URL must reference byrongamatos"
+        )
+
+    def test_gpu_env_vars_in_main_block(self):
+        """NVIDIA GPU env vars should be in the main environment block, not
+        a separate commented environment: block that would override others."""
+        content = self.COMPOSE_PATH.read_text()
+        # Check there is NO separate commented environment: block for GPU
+        # The NVIDIA vars should be commented out inside the main block
+        assert "#   - NVIDIA_VISIBLE_DEVICES=all" in content, (
+            "NVIDIA_VISIBLE_DEVICES should be a commented entry in the main "
+            "environment block, not in a separate environment: block"
+        )
+        # Verify there's no standalone '# environment:' line that would create
+        # a separate override block when uncommented
+        lines = content.splitlines()
+        env_block_starts = [i for i, l in enumerate(lines) if l.strip().startswith('#') and l.strip() == '# environment:']
+        assert len(env_block_starts) == 0, (
+            f"Found {len(env_block_starts)} commented 'environment:' block(s) at line(s) "
+            f"{[i+1 for i in env_block_starts]}. NVIDIA vars should be in the main block."
+        )
+
+
+class TestTasksMd:
+    """TASKS.md must use correct terminology matching server.py contract."""
+
+    TASKS_PATH = Path(__file__).parent.parent / "TASKS.md"
+
+    def test_uses_evicted_not_unloaded(self):
+        """TASKS.md should use 'evicted' not 'unloaded' for warmup state terminology."""
+        content = self.TASKS_PATH.read_text()
+        assert "evicted" in content, (
+            "TASKS.md should reference 'evicted' state (matching server.py contract)"
         )
 
 
@@ -334,6 +380,20 @@ class TestEntrypointLastUpdateDate:
     so transient errors retry on the next cycle instead of waiting 24h."""
 
     ENTRYPOINT_PATH = Path(__file__).parent.parent / "docker-entrypoint.sh"
+
+    def test_auto_update_deps_include_manual_deps(self):
+        """The auto-update demucs install should also install the 7 manual 
+        dependencies (einops, julius, lameenc, openunmix, pyyaml, tqdm, 
+        dora-search) to match the Dockerfile setup."""
+        content = self.ENTRYPOINT_PATH.read_text()
+        # After the 'pip install demucs --no-deps' line, there should be a 
+        # pip install for the manual deps
+        assert "einops" in content, (
+            "auto-update must install einops (manual demucs dep)"
+        )
+        assert "julius" in content, (
+            "auto-update must install julius (manual demucs dep)"
+        )
 
     def test_last_update_date_only_on_success(self):
         """LAST_UPDATE_DATE should only be set when the update succeeds,

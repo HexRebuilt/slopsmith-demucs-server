@@ -78,8 +78,7 @@ ENV PORT=7865 \
     # Redirect HuggingFace and PyTorch caches to the persistent volume
     HF_HOME=/app/cache/huggingface \
     TORCH_HOME=/app/cache/torch \
-    HUGGINGFACE_HUB_CACHE=/app/cache/huggingface/hub \
-    MPLLOCALEDIR=/app/cache/locale
+    HUGGINGFACE_HUB_CACHE=/app/cache/huggingface/hub
 USER appuser
 
 

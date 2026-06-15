@@ -71,6 +71,7 @@ auto_update_loop() {
                                 echo "[updater] Reinstalling dependencies..."
                                 pip install --no-cache-dir -r requirements.txt 2>/dev/null || echo "[updater] Warning: pip install failed (non-fatal)"
                                 pip install --no-cache-dir demucs --no-deps 2>/dev/null || echo "[updater] Warning: demucs install failed (non-fatal)"
+                                pip install --no-cache-dir einops julius lameenc openunmix pyyaml tqdm dora-search 2>/dev/null || echo "[updater] Warning: manual demucs deps install failed (non-fatal)"
                                 echo "[updater] Update complete. Restarting server..."
                                 touch /tmp/restart-server
                                 LAST_UPDATE_DATE="$TODAY"
