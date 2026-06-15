@@ -142,18 +142,55 @@ class TestIdleModelManager:
 
 
 class TestIdleEnvVar:
-    """Tests for the MODEL_IDLE_TTL env var with safe int() parsing."""
+    """Tests for the MODEL_IDLE_TTL env var with safe int() parsing.
+    
+    Uses AST extraction to parse the module-level code block and verify
+    the try/except pattern, rather than fragile string matching.
+    """
 
-    def test_default_env_is_300(self):
-        """When MODEL_IDLE_TTL is not set, default should be 300."""
+    def _extract_env_block(self):
+        """Extract the MODEL_IDLE_TTL assignment block from server.py."""
         source = SERVER_PY.read_text()
-        assert "MODEL_IDLE_TTL" in source, "MODEL_IDLE_TTL not found in server.py"
-        # Check that default value '300' is present in the env var read
-        assert 'MODEL_IDLE_TTL' in source
+        tree = ast.parse(source)
+        # Find the assignment statement for MODEL_IDLE_TTL
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "MODEL_IDLE_TTL":
+                        return node
+            # Also check AnnAssign (type-annotated assignments)
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "MODEL_IDLE_TTL":
+                return node
+            # Check try/except blocks
+            if isinstance(node, ast.Try):
+                for handler in node.handlers:
+                    for n in ast.walk(node):
+                        if isinstance(n, ast.Assign):
+                            for t in n.targets:
+                                if isinstance(t, ast.Name) and t.id == "MODEL_IDLE_TTL":
+                                    return node
+        raise ValueError("MODEL_IDLE_TTL assignment not found in server.py")
 
-    def test_has_safe_int_parse(self):
+    def test_default_is_300(self):
+        """Default MODEL_IDLE_TTL env var value should be 300."""
+        source = SERVER_PY.read_text()
+        # Search for the env var default value pattern
+        assert 'os.environ.get("MODEL_IDLE_TTL", "300")' in source or 'os.environ.get(\'MODEL_IDLE_TTL\', \'300\')' in source, (
+            "MODEL_IDLE_TTL should default to '300'"
+        )
+
+    def test_safe_int_parse(self):
         """MODEL_IDLE_TTL should use try/except for safe int() parsing."""
         source = SERVER_PY.read_text()
-        assert "try:" in source.split("MODEL_IDLE_TTL")[1].split("\n")[0] or "except" in source, (
-            "MODEL_IDLE_TTL should have safe int() parsing with try/except"
-        )
+        tree = ast.parse(source)
+        # Walk the AST looking for a try block containing MODEL_IDLE_TTL assignment
+        found_try = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Try):
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Assign):
+                        for target in child.targets:
+                            if isinstance(target, ast.Name) and target.id == "MODEL_IDLE_TTL":
+                                found_try = True
+                                break
+        assert found_try, "MODEL_IDLE_TTL int() conversion must be wrapped in try/except"

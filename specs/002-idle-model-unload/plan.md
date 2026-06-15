@@ -17,7 +17,7 @@ Add an `IdleModelManager` that monitors the WhisperX ASR model (`_whisperx_model
 
 ### `IdleModelManager` class
 
-```
+```text
 IdleModelManager:
   - _model_ref: reference to module-level _whisperx_model (via closure/global)
   - _last_used: float timestamp (time.monotonic)

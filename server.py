@@ -80,7 +80,7 @@ _PRESERVED_CACHE_DIRS = frozenset({"torch", "huggingface", "locale"})
 try:
     MODEL_IDLE_TTL = int(os.environ.get("MODEL_IDLE_TTL", "300"))
 except (ValueError, TypeError):
-    print(f"[server] WARNING: MODEL_IDLE_TTL is not a valid integer; using default (300)", flush=True)
+    print("[server] WARNING: MODEL_IDLE_TTL is not a valid integer; using default (300)", flush=True)
     MODEL_IDLE_TTL = 300
 
 
@@ -479,9 +479,6 @@ def _get_whisperx_model():
                 device=_whisperx_device(),
                 compute_type=_whisperx_compute_type(),
             )
-            # Model was just loaded (possibly re-loaded after idle unload).
-            # Update warmup_state so /health reflects reality.
-            _mark_lazy_loaded("whisperx")
     # Intentionally do NOT mark warmup ready here. /align needs both the
     # ASR model AND a wav2vec2 aligner to function — if the aligner load
     # fails (unsupported language, transient network), /align would still
@@ -595,8 +592,12 @@ def _get_whisperx_aligner(language: str):
             except Exception:
                 pass
 
-    if lang == "en":
-        _mark_lazy_loaded("whisperx")
+    # Any successful aligner load satisfies the readiness contract after
+    # an idle unload (the ASR model was already loaded). If the state was
+    # "ready" this is a no-op; if it was "unloaded" it transitions back
+    # to "ready"; if warmup is still in-flight it defers to the warmup
+    # thread's final state.
+    _mark_lazy_loaded("whisperx")
     return pair
 
 
