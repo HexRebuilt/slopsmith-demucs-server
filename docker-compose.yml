@@ -17,10 +17,10 @@
 services:
   slopsmith-demucs:
     # ── Pre-built image from GHCR (CI builds on every push to main) ──
-    image: ghcr.io/byrongamatos/slopsmith-demucs-server:latest
+    image: ghcr.io/hexrebuilt/slopsmith-demucs-server:latest
 
     # ── OR build from git URL ──
-    # build: https://github.com/byrongamatos/slopsmith-demucs-server.git#main
+    # build: https://github.com/HexRebuilt/slopsmith-demucs-server.git#main
 
     # ── OR build from local Dockerfile ──
     # build:
@@ -56,6 +56,8 @@ services:
       - SKIP_WARMUP=false
       # Cache cleanup TTL: auto-delete stems older than this (1h, 12h, 24h, NEVER)
       - CACHE_TTL=24h
+      # Idle model TTL: unload WhisperX ASR model from VRAM after 300s of inactivity (0=disabled)
+      - MODEL_IDLE_TTL=300
       # Cache directories — redirect all model downloads to the
       # persistent volume so they survive container restarts:
       - SLOPSMITH_DEMUCS_CACHE=/app/cache

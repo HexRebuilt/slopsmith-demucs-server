@@ -16,7 +16,7 @@ FROM python:3.11-slim AS base
 
 LABEL org.opencontainers.image.title="Slopsmith Demucs Server"
 LABEL org.opencontainers.image.description="AI source separation, lyrics alignment, and pitch extraction service for Slopsmith"
-LABEL org.opencontainers.image.source="https://github.com/byrongamatos/slopsmith-demucs-server"
+LABEL org.opencontainers.image.source="https://github.com/HexRebuilt/slopsmith-demucs-server"
 
 # Prevent Python from writing .pyc files & buffer stdout
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -74,6 +74,7 @@ ENV PORT=7865 \
     UPDATE_CHECK_INTERVAL=3600 \
     SLOPSMITH_DEMUCS_CACHE=/app/cache \
     CACHE_TTL=24h \
+    MODEL_IDLE_TTL=300 \
     # Redirect HuggingFace and PyTorch caches to the persistent volume
     HF_HOME=/app/cache/huggingface \
     TORCH_HOME=/app/cache/torch \

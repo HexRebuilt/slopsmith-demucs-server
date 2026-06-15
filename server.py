@@ -75,6 +75,14 @@ CACHE_TTL = os.environ.get("CACHE_TTL", "24h")
 # Directories under CACHE_DIR that hold model weights (never auto-deleted)
 _PRESERVED_CACHE_DIRS = frozenset({"torch", "huggingface", "locale"})
 
+# Idle model unloading: seconds of inactivity before WhisperX ASR is
+# unloaded from VRAM. Set to 0 to disable unloading.
+try:
+    MODEL_IDLE_TTL = int(os.environ.get("MODEL_IDLE_TTL", "300"))
+except (ValueError, TypeError):
+    print(f"[server] WARNING: MODEL_IDLE_TTL is not a valid integer; using default (300)", flush=True)
+    MODEL_IDLE_TTL = 300
+
 
 def _parse_ttl(ttl_str: str) -> int | None:
     """Parse a TTL string like '1h', '12h', '24h' to seconds.
@@ -145,6 +153,69 @@ warmup_state: dict[str, str] = {
 }
 warmup_state_lock = threading.Lock()
 
+# ── Idle model unloading ──────────────────────────────────────────────────
+#
+# The WhisperX ASR model (~3 GB on GPU) stays resident forever by default.
+# IdleModelManager tracks last-use time and unloads it after MODEL_IDLE_TTL
+# seconds of inactivity. On the next /align call, _get_whisperx_model()
+# re-initializes it (the lazy-load path already handles _whisperx_model
+# being None).
+
+class IdleModelManager:
+    """Manages idle timeout for ML models — unloads from VRAM after TTL.
+
+    Uses a callback pattern so the class itself is pure logic (no global
+    dependencies). Production wires the callback to set _whisperx_model=None
+    and call torch.cuda.empty_cache(). Tests inject a mock callback.
+    """
+
+    def __init__(self, *, ttl=300, on_unload=None):
+        self._ttl = ttl
+        self._last_used = time.monotonic()
+        self._lock = threading.Lock()
+        self._on_unload = on_unload
+
+    def touch(self):
+        """Reset the idle timer — call on every model access."""
+        with self._lock:
+            self._last_used = time.monotonic()
+
+    def unload(self):
+        """Invoke the unload callback if still idle (re-checks under lock)."""
+        with self._lock:
+            elapsed = time.monotonic() - self._last_used
+            if not (self._ttl > 0 and elapsed > self._ttl):
+                return  # was touched since we checked — skip
+        if self._on_unload:
+            self._on_unload()
+
+    def _check_loop(self):
+        """Background daemon: sleep 60s, check if idle > TTL, unload if so."""
+        while True:
+            time.sleep(60)
+            self.unload()  # re-checks idle inside the lock
+
+
+def _unload_whisperx():
+    """Callback: unload WhisperX ASR model from VRAM."""
+    global _whisperx_model
+    with _whisperx_model_lock:
+        _whisperx_model = None
+    with warmup_state_lock:
+        warmup_state["whisperx"] = "unloaded"
+    print(f"[whisperx] Unloaded ASR model after {MODEL_IDLE_TTL}s idle", flush=True)
+    try:
+        if _whisperx_device().startswith("cuda"):
+            torch.cuda.empty_cache()
+    except Exception as exc:
+        print(f"[whisperx] empty_cache() warning during unload: {exc}", flush=True)
+
+
+_idle_manager = IdleModelManager(
+    ttl=MODEL_IDLE_TTL,
+    on_unload=None if MODEL_IDLE_TTL == 0 else _unload_whisperx,
+)
+
 # Per-language wav2vec2 aligner state. The top-level "whisperx" entry
 # above tracks the warmup contract (ASR + en aligner). This dict tells
 # clients which other-language aligners are currently loaded so non-
@@ -197,6 +268,9 @@ async def _startup_event():
     # Start background cache cleanup (daemon thread, dies with server)
     if CACHE_TTL_SECONDS is not None:
         threading.Thread(target=_cache_cleanup_loop, daemon=True).start()
+    # Start idle model unload daemon (only if TTL > 0)
+    if MODEL_IDLE_TTL > 0:
+        threading.Thread(target=_idle_manager._check_loop, daemon=True).start()
 
 
 # ── Health ──────────────────────────────────────────────────────────────
@@ -398,20 +472,24 @@ def _mark_lazy_loaded(name: str) -> None:
 
 def _get_whisperx_model():
     global _whisperx_model
-    if _whisperx_model is None:
-        with _whisperx_model_lock:
-            if _whisperx_model is None:
-                _whisperx_model = whisperx.load_model(
-                    _whisperx_model_name,
-                    device=_whisperx_device(),
-                    compute_type=_whisperx_compute_type(),
-                )
+    with _whisperx_model_lock:
+        if _whisperx_model is None:
+            _whisperx_model = whisperx.load_model(
+                _whisperx_model_name,
+                device=_whisperx_device(),
+                compute_type=_whisperx_compute_type(),
+            )
+            # Model was just loaded (possibly re-loaded after idle unload).
+            # Update warmup_state so /health reflects reality.
+            _mark_lazy_loaded("whisperx")
     # Intentionally do NOT mark warmup ready here. /align needs both the
     # ASR model AND a wav2vec2 aligner to function — if the aligner load
     # fails (unsupported language, transient network), /align would still
     # 500 while /health.warmup.whisperx claimed "ready". The aligner
     # helper marks ready only after a successful aligner load, which is
     # the true gate for subsystem readiness.
+    # Touch idle timer — model is being accessed
+    _idle_manager.touch()
     return _whisperx_model
 
 

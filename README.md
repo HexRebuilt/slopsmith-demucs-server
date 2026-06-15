@@ -1,8 +1,8 @@
 # Slopsmith Demucs Server
 
-A lightweight GPU-accelerated service providing AI source separation, lyrics alignment, and per-syllable pitch extraction for [Slopsmith](https://github.com/byrongamatos/slopsmith). Designed to run on a desktop with a CUDA GPU while Slopsmith runs on a NAS or Docker host.
+A lightweight GPU-accelerated service providing AI source separation, lyrics alignment, and per-syllable pitch extraction for [Slopsmith](https://github.com/hexrebuilt/slopsmith). Designed to run on a desktop with a CUDA GPU while Slopsmith runs on a NAS or Docker host.
 
-[![Docker Build](https://github.com/byrongamatos/slopsmith-demucs-server/actions/workflows/docker-build.yml/badge.svg)](https://github.com/byrongamatos/slopsmith-demucs-server/actions/workflows/docker-build.yml)
+[![Docker Build](https://github.com/hexrebuilt/slopsmith-demucs-server/actions/workflows/docker-build.yml/badge.svg)](https://github.com/hexrebuilt/slopsmith-demucs-server/actions/workflows/docker-build.yml)
 
 ## Features
 
@@ -21,7 +21,7 @@ A lightweight GPU-accelerated service providing AI source separation, lyrics ali
 ### Install (Native)
 
 ```bash
-git clone https://github.com/byrongamatos/slopsmith-demucs-server.git
+git clone https://github.com/hexrebuilt/slopsmith-demucs-server.git
 cd slopsmith-demucs-server
 python -m venv .venv
 source .venv/bin/activate
@@ -196,6 +196,7 @@ The container can automatically check for repository updates and restart. **Disa
 | `SLOPSMITH_DEMUCS_MODEL` | — | Override default Demucs model |
 | `SLOPSMITH_API_KEY` | — | API authentication key |
 | `CACHE_TTL` | `24h` | Cache cleanup TTL (`1h`, `12h`, `24h`, or `NEVER` to disable auto-cleanup) |
+| `MODEL_IDLE_TTL` | `300` | Seconds of inactivity before the WhisperX ASR model is unloaded from VRAM (0 = disabled). Auto-reloaded on the next `/align` request. |
 
 **Disable auto-update** (default — safe for Portainer):
 ```bash
@@ -222,6 +223,39 @@ docker run -e CACHE_TTL=NEVER -p 7865:7865 slopsmith-demucs-server
 docker run -e CACHE_TTL=12h -p 7865:7865 slopsmith-demucs-server
 ```
 
+### Idle Model Unloading
+
+The WhisperX ASR model is held in VRAM for fast `/align` requests. When the server
+is idle, this consumes GPU memory unnecessarily. The idle unloading feature
+automatically evicts the WhisperX ASR model from VRAM after a configurable period
+of inactivity.
+
+**How it works:**
+
+1. After each `/align` request completes, a timer starts counting down.
+2. If no new `/align` request arrives before the timer expires, the WhisperX
+   ASR model is evicted from VRAM.
+3. On the next `/align` request, the model is automatically reloaded (this adds
+   a few seconds of latency to that request).
+4. A new `/align` request resets the timer, keeping the model resident under
+   active load.
+
+**Configuration:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODEL_IDLE_TTL` | `300` | Seconds of inactivity before WhisperX ASR model is unloaded from VRAM. Set to `0` to disable unloading entirely (model stays resident indefinitely). |
+
+**Disable idle unloading (model always stays in VRAM):**
+```bash
+docker run -e MODEL_IDLE_TTL=0 -p 7865:7865 slopsmith-demucs-server
+```
+
+**Reduce TTL for more aggressive memory reclamation (e.g. 60 seconds):**
+```bash
+docker run -e MODEL_IDLE_TTL=60 -p 7865:7865 slopsmith-demucs-server
+```
+
 ### GitHub Container Registry (CI)
 
 The CI workflow (`.github/workflows/docker-build.yml`) automatically builds the Docker image, pushes it to GHCR, generates an SBOM, and runs a grype vulnerability scan on every push to `main`.
@@ -238,13 +272,13 @@ docker pull ghcr.io/YOUR_GITHUB_USER/slopsmith-demucs-server:latest
 
 **Or from the upstream repo (once PR is merged):**
 ```bash
-docker pull ghcr.io/byrongamatos/slopsmith-demucs-server:latest
+docker pull ghcr.io/hexrebuilt/slopsmith-demucs-server:latest
 ```
 
 **Build directly from git (no clone needed):**
 ```bash
 # From upstream main
-docker build -t slopsmith-demucs-server https://github.com/byrongamatos/slopsmith-demucs-server.git#main
+docker build -t slopsmith-demucs-server https://github.com/hexrebuilt/slopsmith-demucs-server.git#main
 
 # From your fork
 docker build -t slopsmith-demucs-server https://github.com/YOUR_USER/slopsmith-demucs-server.git#main
@@ -257,7 +291,7 @@ docker run --gpus all -p 7865:7865 slopsmith-demucs-server
 ```yaml
 services:
   slopsmith-demucs:
-    build: https://github.com/byrongamatos/slopsmith-demucs-server.git#main
+    build: https://github.com/hexrebuilt/slopsmith-demucs-server.git#main
     ports:
       - "7865:7865"
 ```
